@@ -61,8 +61,8 @@ if uploaded_files:
                 prompt = f"Write a catchy social media caption for this content: {description}"
                 
                 try:
-                    # ===== New OpenAI API =====
-                    response = openai.ChatCompletion.create(
+                    # ===== Latest OpenAI API =====
+                    response = openai.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
                             {"role": "system", "content": "You are a social media assistant."},
