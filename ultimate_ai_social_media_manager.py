@@ -35,6 +35,9 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
+# ===== Container to save captions =====
+captions_list = []
+
 # ===== Output container =====
 output_container = st.container()
 
@@ -58,13 +61,34 @@ if uploaded_files:
                 prompt = f"Write a catchy social media caption for this content: {description}"
                 
                 try:
-                    response = openai.Completion.create(
-                        engine="text-davinci-003",
-                        prompt=prompt,
+                    # ===== New OpenAI API =====
+                    response = openai.ChatCompletion.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": "You are a social media assistant."},
+                            {"role": "user", "content": prompt}
+                        ],
                         max_tokens=60
                     )
-                    caption = response.choices[0].text.strip()
+                    caption = response.choices[0].message.content.strip()
                     st.success("✨ AI Caption Generated:")
+                    
+                    # ===== Display caption and copy button =====
                     st.write(caption)
+                    st.button("Copy to Clipboard", key=file.name, on_click=lambda c=caption: st.experimental_set_query_params(caption=c))
+                    
+                    # ===== Save caption for later download =====
+                    captions_list.append(f"{file.name}: {caption}")
+                    
                 except Exception as e:
                     st.error(f"Error generating caption: {e}")
+
+# ===== Download all captions =====
+if captions_list:
+    captions_text = "\n\n".join(captions_list)
+    st.download_button(
+        label="📥 Download All Captions",
+        data=captions_text,
+        file_name="captions.txt",
+        mime="text/plain"
+    )
