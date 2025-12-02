@@ -1,89 +1,70 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont
-import cv2
-import os
+from PIL import Image
+from moviepy.editor import VideoFileClip
 import openai
-from pathlib import Path
-import pandas as pd
+import io
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# ===== Set your OpenAI API key =====
+openai.api_key = "YOUR_OPENAI_API_KEY"
 
-def generate_post(file_name, description, platform="Instagram"):
-    prompt = f"""
-    You are a social media assistant for an art framing business.
-    Generate content for {platform}.
-    Given the following description and file name, create:
-    1. Caption suitable for {platform}
-    2. 10 relevant hashtags
-    3. Short alt text
-    File: {file_name}
-    Description: {description}
+# ===== Page config =====
+st.set_page_config(
+    page_title="Framed Images AI",
+    page_icon="🖼️",
+    layout="wide",
+)
+
+# ===== Header =====
+st.markdown(
     """
-    response = openai.ChatCompletion.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "system", "content": "You are a creative social media content generator."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return response.choices[0].message.content
+    <h1 style='text-align: center; color: #4B0082;'>🖼️ Framed Images AI Caption Generator</h1>
+    <p style='text-align: center; font-size:16px;'>Upload your image or video, add a short description, and let AI generate catchy social media captions.</p>
+    """, 
+    unsafe_allow_html=True
+)
 
-def resize_and_watermark(img_path, size=(1080,1080), watermark_text="Framed Images"):
-    img = Image.open(img_path)
-    img = img.resize(size, Image.ANTIALIAS)
-    draw = ImageDraw.Draw(img)
-    font = ImageFont.load_default()
-    text_width, text_height = draw.textsize(watermark_text, font)
-    draw.text((img.width - text_width - 10, img.height - text_height - 10), watermark_text, font=font, fill=(255,255,255,128))
-    temp_path = "resized_" + os.path.basename(img_path)
-    img.save(temp_path)
-    return temp_path
+# ===== Sidebar =====
+st.sidebar.header("Options")
+description = st.sidebar.text_input("Write a short description (optional):")
+generate_button_text = st.sidebar.button("Generate Captions")
 
-def extract_video_frame(video_path):
-    cap = cv2.VideoCapture(video_path)
-    cap.set(cv2.CAP_PROP_POS_MSEC, 1000)
-    ret, frame = cap.read()
-    cap.release()
-    if ret:
-        temp_img_path = "temp_frame.jpg"
-        cv2.imwrite(temp_img_path, frame)
-        return temp_img_path
-    return None
+# ===== File uploader =====
+uploaded_files = st.file_uploader(
+    "Upload one or more images/videos", 
+    type=["jpg","jpeg","png","mp4","mov"], 
+    accept_multiple_files=True
+)
 
-st.title("🎨 Ultimate AI Social Media Manager")
-st.write("Upload images/videos, generate captions, resize media, add watermark, and export!")
+# ===== Output container =====
+output_container = st.container()
 
-uploaded_files = st.file_uploader("Upload images or videos", type=["jpg","png","mp4","mov"], accept_multiple_files=True)
-description = st.text_input("Enter a short description for these posts:")
-platforms = st.multiselect("Select platforms:", ["Instagram","X/Twitter","Facebook","LinkedIn"], default=["Instagram"])
-
-if st.button("Generate Posts") and uploaded_files and description and platforms:
-    all_posts = []
+if uploaded_files:
     for file in uploaded_files:
-        temp_path = Path("temp_" + file.name)
-        with open(temp_path, "wb") as f:
-            f.write(file.getbuffer())
-        if file.type.startswith("video"):
-            temp_path = Path(extract_video_frame(temp_path))
-        for platform in platforms:
-            size_map = {
-                "Instagram": (1080,1080),
-                "X/Twitter": (1200,675),
-                "Facebook": (1200,630),
-                "LinkedIn": (1200,1200)
-            }
-            resized_path = resize_and_watermark(temp_path, size=size_map.get(platform,(1080,1080)))
-            post_content = generate_post(file.name, description, platform)
-            all_posts.append({
-                "file_name": file.name,
-                "platform": platform,
-                "resized_image": resized_path,
-                "caption": post_content
-            })
-            st.image(resized_path, caption=f"{file.name} | {platform}")
-            st.text_area(f"{file.name} | {platform} Caption & Hashtags:", post_content, height=150)
-    if st.button("Export All Posts to CSV"):
-        df = pd.DataFrame(all_posts)
-        export_path = "ultimate_ai_posts.csv"
-        df.to_csv(export_path, index=False, encoding="utf-8")
-        st.success(f"All posts exported to {export_path}!")
+        file_type = file.type
+        output_container.markdown(f"### File: {file.name}")
+        
+        if file_type.startswith("image"):
+            image = Image.open(file)
+            output_container.image(image, use_column_width=True)
+        elif file_type.startswith("video"):
+            output_container.video(file)
+        else:
+            output_container.warning("Unsupported file type.")
+            
+        # ===== Generate caption =====
+        if generate_button_text:
+            with output_container:
+                st.info("Generating AI caption...")
+                prompt = f"Write a catchy social media caption for this content: {description}"
+                
+                try:
+                    response = openai.Completion.create(
+                        engine="text-davinci-003",
+                        prompt=prompt,
+                        max_tokens=60
+                    )
+                    caption = response.choices[0].text.strip()
+                    st.success("✨ AI Caption Generated:")
+                    st.write(caption)
+                except Exception as e:
+                    st.error(f"Error generating caption: {e}")
